@@ -1,13 +1,13 @@
 编译
-colcon build
+colcon build --symlink-install
 
 conda create -n embodiedcar python=3.8
 conda activate embodiedcar
 电机引脚：
-        "left_back": Motor(backward=18, forward=27),
-        "left_front": Motor(backward=5, forward=6),
-        "right_front": Motor(backward=13, forward=19),
-        "right_back": Motor(backward=12, forward=16)
+            "left_back": Motor(forward=27, backward=18),
+            "left_front": Motor(forward=6, backward=5),
+            "right_front": Motor(forward=19, backward=13),
+            "right_back": Motor(forward=16, backward=12)
 
 查看实时拍摄照片
 浏览器登陆：

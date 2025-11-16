@@ -11,13 +11,11 @@ stream_url = "http://172.20.10.7:8080/?action=stream"    # 这里请替换为你
 control_url = "http://172.20.10.7:5000/control"          # 这里请替换为你的树莓派 IP 地址
 cap = cv2.VideoCapture(stream_url)                       # 获取视频的输入源，也就是这个网址
 
-cfg = utils.utils.load_datafile(r'E:\embodiedcar\Yolo-FastestV2\data\coco.data')
-weights = r'E:\embodiedcar\Yolo-FastestV2\modelzoo\coco2017-0.241078ap-model.pth'
+cfg = utils.utils.load_datafile(r'D:\embodiedcar\embodiedcar\Yolo-FastestV2\data\coco.data')
+weights = r'D:\embodiedcar\embodiedcar\Yolo-FastestV2\modelzoo\coco2017-0.241078ap-model.pth'
 assert os.path.exists(weights), "请指定正确的模型路径"
 
 target_categories = ["person"]                           # 我们这里要追踪人，你可以换成其他物体
-SEARCH_COMMANDS = ["LEFT", "STOP"]                       # 没看到目标时交替左转和暂停，减慢旋转速度
-search_command_index = 0
 
 # 模型加载：如果你的电脑上有 GPU，可以用第一行；如果你的电脑有 Apple M 系列芯片，可以用第二行
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -51,13 +49,6 @@ def send_command(box, h, w):
             response = requests.post(control_url, json={'command': "FORWARD"})            
             print("Go straight")
     
-def search_target():
-    global search_command_index
-    command = SEARCH_COMMANDS[search_command_index]
-    search_command_index = (search_command_index + 1) % len(SEARCH_COMMANDS)
-    response = requests.post(control_url, json={'command': command})
-    print(f"Searching target: {command}")
-
 
 while True:
     ret, frame = cap.read()                             # 不停地从输入源读取一帧图像
@@ -83,10 +74,9 @@ while True:
     scale_h, scale_w = h / cfg["height"], w / cfg["width"]
 
     if len(output_boxes[0]) == 0:
-        search_target()
-        continue
+        response = requests.post(control_url, json={'command': "STOP"})
+        print("Stop")
 
-    found_target = False
     #绘制预测框
     for box in output_boxes[0]:
         box = box.tolist()
@@ -99,14 +89,13 @@ while True:
         
         if category in target_categories:
             send_command(box, cfg["height"], cfg["width"])
-            found_target = True
+        else:
+            response = requests.post(control_url, json={'command': "STOP"})
+            print("Stop")
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
         cv2.putText(frame, '%.2f' % obj_score, (x1, y1 - 5), 0, 0.7, (0, 255, 0), 2)    
         cv2.putText(frame, category, (x1, y1 - 25), 0, 0.7, (0, 255, 0), 2)
-
-    if not found_target:
-        search_target()
     processed_frame = frame
     # 显示图像
     cv2.imshow('Processed Frame', processed_frame)      # 显示获取到的图像

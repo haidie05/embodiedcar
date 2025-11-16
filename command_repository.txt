@@ -48,6 +48,8 @@ cd .. # 返回到WORKSPACE文件夹，这时候你应该看到你在 HAPPYPROJEC
 colcon build --symlink-install # 编译
 
 
+.\agnes\Scripts\Activate.ps1
+
 正确关机：
 sudo shutdown -h now
 
@@ -62,3 +64,6 @@ python3 test.py --img E:\embodiedcar\Yolo-FastestV2\img\000139.jpg
 wget -O pose_landmarker.task -q https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
 
 wget -O pose_landmarker.task -q https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+
+C:\Users\lenovo\.conda\envs\agnes\python.exe mediapipe_detect.py
+C:\Users\lenovo\.conda\envs\agnes\python.exe change.py

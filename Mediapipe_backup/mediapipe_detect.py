@@ -49,9 +49,14 @@ RIGHT_WRIST = 16
 # Global variable for detection result
 DETECTION_RESULT = None
 
-# 手势识别函数
+# 手势识别函数（仅三种姿态：前进/左转/右转；否则不输出手势，由上层默认停止）
 def recognize_gesture(pose_landmarks):
-    """识别交通手势"""
+    """识别三种姿态：
+    - T 字型（双臂水平张开） => FORWARD
+    - 左手在身体左侧水平平举 => LEFT
+    - 右手在身体右侧水平平举 => RIGHT
+    其它情况返回 none（由上层逻辑停止）
+    """
     if not pose_landmarks or len(pose_landmarks) < 33:
         return GESTURE_NONE
     
@@ -71,7 +76,7 @@ def recognize_gesture(pose_landmarks):
     def get_distance(p1, p2):
         return np.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
     
-    # Check for STOP gesture: Both arms extended horizontally (T-pose)
+    # T 字型 => 前进：双腕与双肩高度接近，且腕高于对应肩，并向两侧明显伸展
     if (is_visible(left_wrist) and is_visible(right_wrist) and 
         is_visible(left_shoulder) and is_visible(right_shoulder)):
         wrist_height_diff = abs(left_wrist.y - right_wrist.y)
@@ -82,9 +87,9 @@ def recognize_gesture(pose_landmarks):
         
         if (wrist_height_diff < 0.1 and left_raised and right_raised and 
             left_extended and right_extended):
-            return GESTURE_STOP
+            return GESTURE_FORWARD
     
-    # Check for LEFT turn: Left arm extended to the left
+    # 左转：左手在身体左侧水平平举（相对左肩更靠左、与肘的距离足够、与肩高度接近或略高）
     if is_visible(left_wrist) and is_visible(left_shoulder) and is_visible(left_elbow):
         left_horizontal = left_wrist.x < left_shoulder.x - 0.1
         left_arm_extended = get_distance(left_wrist, left_elbow) > 0.15
@@ -93,7 +98,7 @@ def recognize_gesture(pose_landmarks):
         if left_horizontal and left_arm_extended and left_vertical:
             return GESTURE_LEFT
     
-    # Check for RIGHT turn: Right arm extended to the right
+    # 右转：右手在身体右侧水平平举（相对右肩更靠右、与肘的距离足够、与肩高度接近或略高）
     if is_visible(right_wrist) and is_visible(right_shoulder) and is_visible(right_elbow):
         right_horizontal = right_wrist.x > right_shoulder.x + 0.1
         right_arm_extended = get_distance(right_wrist, right_elbow) > 0.15
@@ -101,23 +106,6 @@ def recognize_gesture(pose_landmarks):
         
         if right_horizontal and right_arm_extended and right_vertical:
             return GESTURE_RIGHT
-    
-    # Check for FORWARD gesture: One arm extended forward
-    if is_visible(left_wrist) and is_visible(left_shoulder) and is_visible(left_elbow):
-        left_forward = left_wrist.z < left_shoulder.z - 0.05
-        left_arm_extended = get_distance(left_wrist, left_elbow) > 0.12
-        left_aligned = abs(left_wrist.x - left_shoulder.x) < 0.15
-        
-        if left_forward and left_arm_extended and left_aligned:
-            return GESTURE_FORWARD
-    
-    if is_visible(right_wrist) and is_visible(right_shoulder) and is_visible(right_elbow):
-        right_forward = right_wrist.z < right_shoulder.z - 0.05
-        right_arm_extended = get_distance(right_wrist, right_elbow) > 0.12
-        right_aligned = abs(right_wrist.x - right_shoulder.x) < 0.15
-        
-        if right_forward and right_arm_extended and right_aligned:
-            return GESTURE_FORWARD
     
     return GESTURE_NONE
 
@@ -133,7 +121,7 @@ def send_command(gesture):
     elif gesture == GESTURE_FORWARD:
         print("Go straight")
 
-# 模型加载：如果你的电脑上有 GPU，会自动使用 GPU 加速；如果没有 GPU，会使用 CPU
+# 模型加载：如果你的电脑上有 GPU，会自动使用 GPU加速；如果没有 GPU，会使用 CPU
 def create_detector():
     def save_result(result: vision.PoseLandmarkerResult,
                     unused_output_image: mp.Image, timestamp_ms: int):
@@ -157,23 +145,20 @@ def create_detector():
             min_tracking_confidence=0.5,
             result_callback=save_result), use_gpu_delegate
     
-    # 尝试使用 GPU（如果 CUDA 可用），否则使用 CPU
+    # 优先尝试使用 MediaPipe GPU delegate（与 CUDA 无强关联），失败再回退 CPU
     # MediaPipe 的 GPU delegate 在 Windows 上可能有限制，但先尝试
-    if use_gpu:
-        print("Attempting to initialize MediaPipe with GPU...")
-        try:
-            options, is_gpu = create_options(use_gpu_delegate=True)
-            detector = vision.PoseLandmarker.create_from_options(options)
-            if is_gpu:
-                print("✓ GPU acceleration enabled successfully")
-            else:
-                print("✓ Using CPU inference (GPU delegate not available)")
-            return detector
-        except Exception as e:
-            print(f"Failed to initialize GPU: {type(e).__name__}: {e}")
-            print("Falling back to CPU...")
-    else:
-        print("CUDA not available, using CPU inference")
+    print("Attempting to initialize MediaPipe with GPU delegate...")
+    try:
+        options, is_gpu = create_options(use_gpu_delegate=True)
+        detector = vision.PoseLandmarker.create_from_options(options)
+        if is_gpu:
+            print("✓ GPU acceleration enabled successfully")
+        else:
+            print("✓ Using CPU inference (GPU delegate not available)")
+        return detector
+    except Exception as e:
+        print(f"Failed to initialize GPU delegate: {type(e).__name__}: {e}")
+        print("Falling back to CPU...")
     
     # Fallback to CPU
     options, _ = create_options(use_gpu_delegate=False)

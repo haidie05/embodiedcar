@@ -18,9 +18,9 @@ assert os.path.exists(weights), "请指定正确的模型路径"
 target_categories = ["person"]                           # 我们这里要追踪人，你可以换成其他物体
 
 # 模型加载：如果你的电脑上有 GPU，可以用第一行；如果你的电脑有 Apple M 系列芯片，可以用第二行
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-device = "cpu"
+# device = "cpu"
 
 model = model.detector.Detector(cfg["classes"], cfg["anchor_num"], True).to(device)
 model.load_state_dict(torch.load(weights, map_location=device))
@@ -67,7 +67,7 @@ while True:
 
     #加载label names
     LABEL_NAMES = []
-    with open(cfg["names"], 'r') as f:
+    with open(r"D:\embodiedcar\embodiedcar\Yolo-FastestV2\data\coco.names", 'r') as f:
         for line in f.readlines():
             LABEL_NAMES.append(line.strip())
     h, w, _ = frame.shape

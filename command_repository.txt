@@ -1,3 +1,32 @@
+视觉部分
+树莓派 
+cd VISUAL
+运行
+source install/setup.bash # 激活环境
+ros2 run yolo yolo_control # 运行节点
+
+打开另外一个终端
+运行
+cd mjpg-streamer/mjpg-streamer-experimental
+./mjpg_streamer -i "./input_uvc.so -d /dev/video0 -r 640x480 -f 10" -o "./output_http.so -w ./www"
+
+再在电脑端运行
+cd Yolo-FastestV2
+python rasp_yolo.py
+
+语音阶段
+树莓派
+cd VISUAL
+source install/setup.bash
+ros2 run yolo yolo_control
+电脑
+cd small-car
+关键词匹配
+python Step4-ASR+Control.py
+
+关机
+sudo shutdown -h now
+
 编译
 colcon build --symlink-install
 
@@ -35,6 +64,8 @@ cd VISUAL/src
 cd VISUAL
 source install/setup.bash # 激活环境
 ros2 run yolo yolo_control # 运行节点
+
+第三阶段也是但是要再VPN环境下运行程序
 另一个终端运行：
 cd mjpg-streamer/mjpg-streamer-experimental
 ./mjpg_streamer -i "./input_uvc.so -d /dev/video0 -r 640x480 -f 10" -o "./output_http.so -w ./www"

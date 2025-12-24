@@ -11,8 +11,8 @@ stream_url = "http://172.20.10.7:8080/?action=stream"    # 这里请替换为你
 control_url = "http://172.20.10.7:5000/control"          # 这里请替换为你的树莓派 IP 地址
 cap = cv2.VideoCapture(stream_url)                       # 获取视频的输入源，也就是这个网址
 
-cfg = utils.utils.load_datafile(r'D:\embodiedcar\embodiedcar\Yolo-FastestV2\data\coco.data')
-weights = r'D:\embodiedcar\embodiedcar\Yolo-FastestV2\modelzoo\coco2017-0.241078ap-model.pth'
+cfg = utils.utils.load_datafile(r'E:\embodiedcar\Yolo-FastestV2\data\coco.data')
+weights = r'E:\embodiedcar\Yolo-FastestV2\modelzoo\coco2017-0.241078ap-model.pth'
 assert os.path.exists(weights), "请指定正确的模型路径"
 
 target_categories = ["person"]                           # 我们这里要追踪人，你可以换成其他物体
@@ -67,7 +67,7 @@ while True:
 
     #加载label names
     LABEL_NAMES = []
-    with open(r"D:\embodiedcar\embodiedcar\Yolo-FastestV2\data\coco.names", 'r') as f:
+    with open(r"E:\embodiedcar\Yolo-FastestV2\data\coco.names", 'r') as f:
         for line in f.readlines():
             LABEL_NAMES.append(line.strip())
     h, w, _ = frame.shape

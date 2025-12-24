@@ -1,0 +1,35 @@
+使用anaconda创建虚拟环境的步骤
+1. 用管理员身份运行anaconda prompt
+2. conda create -n {env_name} python=3.8/9/10
+3. 修改C盘/D盘Anaconda文件夹中的.condarc文件，用记事本打开，把channel从默认状态改成规定安装在D盘（这一步有没有效就不知道了）
+4. 创建在D盘中conda create --prefix D:\Anaconda\envs\car python=3.9
+5. 创建在D盘中的
+安装包
+1. 先把D:\Anaconda\envs\{env_name}\Lib里面的site.py文件用管理员权限打开
+将USER_SITE=None；USER_BASE=None
+修改为USER_SITE='D:\Anaconda\envs\{env_name}\Lib\site-packages'；USER_BASE='D:\Anaconda\envs\{env_name}'
+2. 激活环境
+conda activate {env_name}
+3. 安装所需要的库
+pip install name
+镜像源安装 
+pip install name -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+切换到国内镜像源网站
+pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+
+其它操作
+0. 查看当前conda的状况
+conda info
+1. 查看当前所有虚拟环境
+conda info --envs
+2. 查看当前环境中安装的包
+conda list
+3. 退出环境
+conda deactivate
+4. 查看当前环境中安装的包
+conda list
+5. 删除环境中已安装的包
+pip uninstall name
+6. 删除已经创建的虚拟环境
+conda remove -n val --all

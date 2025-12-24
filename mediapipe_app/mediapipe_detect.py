@@ -7,7 +7,6 @@ import mediapipe as mp
 
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-from mediapipe.framework.formats import landmark_pb2
 
 # 检查 CUDA 是否可用（用于参考，MediaPipe 有自己的 GPU delegate）
 try:
@@ -21,16 +20,40 @@ except ImportError:
     use_gpu = False
     print("PyTorch not installed, cannot check CUDA availability")
 
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
+# MediaPipe 0.10+ 不再有 solutions API，需要手动绘制关键点
+# 定义姿态连接关系（用于绘制骨架）
+POSE_CONNECTIONS = [
+    (0, 1), (1, 2), (2, 3), (3, 7),  # 面部
+    (0, 4), (4, 5), (5, 6), (6, 8),  # 面部
+    (9, 10),  # 肩部
+    (11, 12),  # 肩膀
+    (11, 13), (13, 15),  # 左臂
+    (12, 14), (14, 16),  # 右臂
+    (11, 23), (12, 24),  # 躯干上部
+    (23, 24),  # 躯干中部
+    (23, 25), (25, 27),  # 左腿
+    (24, 26), (26, 28),  # 右腿
+    (27, 29), (27, 31),  # 左脚
+    (28, 30), (28, 32),  # 右脚
+]
 
 # 这里请替换为你的树莓派 IP 地址
 stream_url = "http://172.20.10.7:8080/?action=stream"    # 树莓派摄像头流地址
 control_url = "http://172.20.10.7:5000/control"          # 树莓派控制API地址
-model_path = r"D:\embodiedcar\embodiedcar\Mediapipe\pose_landmarker.task"                       # MediaPipe模型路径
+# MediaPipe模型路径 - 使用相对于脚本文件的路径
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(script_dir, "pose_landmarker.task")
 
 cap = cv2.VideoCapture(stream_url)                       # 获取视频的输入源，也就是这个网址
+
+# 检查视频流连接
+if not cap.isOpened():
+    print(f"⚠️  警告: 无法打开视频流 {stream_url}")
+    print("   请检查：1) 树莓派是否开机 2) IP地址是否正确 3) 视频流服务是否运行")
+    print("   程序将继续运行，但可能无法获取视频帧")
+else:
+    print(f"✓ 视频流连接成功: {stream_url}")
 
 # Gesture types (using uppercase to match YOLO code format)
 GESTURE_NONE = "none"
@@ -123,17 +146,28 @@ def recognize_gesture(pose_landmarks):
 
 def send_command(gesture):
     """发送命令给树莓派"""
-    response = requests.post(control_url, json={'command': gesture})
-    if gesture == GESTURE_STOP:
-        print("Stop")
-    elif gesture == GESTURE_LEFT:
-        print("Turn left")
-    elif gesture == GESTURE_RIGHT:
-        print("Turn right")
-    elif gesture == GESTURE_FORWARD:
-        print("Go straight")
-    elif gesture == GESTURE_BACKWARD:
-        print("Go backward")
+    try:
+        response = requests.post(control_url, json={'command': gesture}, timeout=2)
+        response.raise_for_status()  # 检查HTTP错误
+        if gesture == GESTURE_STOP:
+            print("Stop")
+        elif gesture == GESTURE_LEFT:
+            print("Turn left")
+        elif gesture == GESTURE_RIGHT:
+            print("Turn right")
+        elif gesture == GESTURE_FORWARD:
+            print("Go straight")
+        elif gesture == GESTURE_BACKWARD:
+            print("Go backward")
+    except requests.exceptions.ConnectionError as e:
+        print(f"⚠️  无法连接到树莓派控制API ({control_url}): 连接被拒绝")
+        print(f"   请检查：1) 树莓派是否开机 2) IP地址是否正确 3) 控制服务是否运行")
+    except requests.exceptions.Timeout:
+        print(f"⚠️  连接超时: 无法在2秒内连接到 {control_url}")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️  请求错误: {e}")
+    except Exception as e:
+        print(f"⚠️  发送命令时发生未知错误: {e}")
 
 # 模型加载：如果你的电脑上有 GPU，会自动使用 GPU加速；如果没有 GPU，会使用 CPU
 def create_detector():
@@ -189,33 +223,69 @@ last_sent_gesture = GESTURE_NONE
 command_frame_count = 0   # 当前命令已执行的帧数
 max_command_frames = 30   # 每个命令最多执行的帧数（例如30帧，假设30fps约1.0秒），达到后自动停止
 
+# 时间戳管理：确保时间戳单调递增
+last_timestamp_ms = 0
+
 while True:
     ret, frame = cap.read()                             # 不停地从输入源读取一帧图像
     if not ret:                                         # 如果读取失败，结束循环
-        break
+        print("⚠️  无法读取视频帧，可能视频流已断开")
+        print("   程序将在1秒后重试...")
+        time.sleep(1)
+        # 尝试重新连接
+        cap.release()
+        cap = cv2.VideoCapture(stream_url)
+        if not cap.isOpened():
+            print("   重连失败，继续尝试...")
+        continue
     
     # 将图片转换为 MediaPipe 需要的格式
     rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
     
     # 运行 MediaPipe 模型，得到输出
-    detector.detect_async(mp_image, time.time_ns() // 1_000_000)
+    # 确保时间戳单调递增（MediaPipe 异步模式要求）
+    current_timestamp_ms = time.time_ns() // 1_000_000
+    if current_timestamp_ms <= last_timestamp_ms:
+        # 如果时间戳没有增加，强制增加1毫秒
+        current_timestamp_ms = last_timestamp_ms + 1
+    last_timestamp_ms = current_timestamp_ms
+    
+    try:
+        detector.detect_async(mp_image, current_timestamp_ms)
+    except ValueError as e:
+        if "monotonically increasing" in str(e):
+            print(f"⚠️  时间戳错误，跳过此帧: {e}")
+            continue
+        else:
+            raise
     
     # 识别手势
     current_gesture = GESTURE_NONE
     if DETECTION_RESULT:
         for pose_landmarks in DETECTION_RESULT.pose_landmarks:
-            # 绘制姿态关键点
-            pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
-            pose_landmarks_proto.landmark.extend([
-                landmark_pb2.NormalizedLandmark(x=landmark.x, y=landmark.y, z=landmark.z) 
-                for landmark in pose_landmarks
-            ])
-            mp_drawing.draw_landmarks(
-                frame,
-                pose_landmarks_proto,
-                mp_pose.POSE_CONNECTIONS,
-                mp_drawing_styles.get_default_pose_landmarks_style())
+            # 绘制姿态关键点（使用 OpenCV 手动绘制，因为 MediaPipe 0.10+ 不再有 solutions API）
+            h, w, _ = frame.shape
+            landmark_points = []
+            
+            for landmark in pose_landmarks:
+                if landmark.visibility > 0.5:  # 只绘制可见的关键点
+                    x = int(landmark.x * w)
+                    y = int(landmark.y * h)
+                    landmark_points.append((x, y))
+                    # 绘制关键点
+                    cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
+                else:
+                    landmark_points.append(None)
+            
+            # 绘制连接线
+            for connection in POSE_CONNECTIONS:
+                pt1_idx, pt2_idx = connection
+                if (pt1_idx < len(landmark_points) and pt2_idx < len(landmark_points) and
+                    landmark_points[pt1_idx] is not None and landmark_points[pt2_idx] is not None):
+                    pt1 = landmark_points[pt1_idx]
+                    pt2 = landmark_points[pt2_idx]
+                    cv2.line(frame, pt1, pt2, (0, 255, 0), 2)
             
             # 识别手势
             gesture = recognize_gesture(pose_landmarks)
